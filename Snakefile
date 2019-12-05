@@ -10,7 +10,7 @@ transcripts='ref/gencode_transcript_seqs.fa'
 ano='ref/gencode_ano.gtf.gz'
 
 rule all:
-    input: 'ref/nontranscribed_windows.bed','ref/dummy_tx.bed', 'ref/dummy_transcript_seqs.fa'
+    input: expand('run_k-{k}_l-{l}/{type}_transcript_kmers.pydata', k=[6, 10, 14, 20], l=[1, 2],type=['ref', 'dummy'] )
 
 rule download_annotation:
     output:genome, transcripts, ano
@@ -22,6 +22,7 @@ rule download_annotation:
         wget -O - ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_32/gencode.v32.transcripts.fa.gz | gunzip -c - > {transcripts}
         module load samtools 
         samtools faidx {genome}
+       
         '''
 
 
@@ -31,41 +32,52 @@ rule download_annotation:
 
 '''
 
-rule get_genome_masked_regions:
-    input: genome, transcripts, ano
-    output: tbit='ref/gencode_genome.2bit',chrom_masks='ref/chrom_masked_regions.bed' 
+rule remove_small_transcripts:
+    input: transcripts
+    params: min_transcript_length = config['min_transcript_length']
+    output: 'run_k-{k}_l-{l}/gencode_transcript_seqs_valid_size.fa'
+    shell:
+        '''
+        
+        python3 scripts/remove_tx_by_lengths.py {input} {params.min_transcript_length} {output}
+
+        '''
+
+
+
+rule get_genome_info:
+    input: genome
+    output: tbit = 'ref/gencode_genome.2bit', chrom_masks = 'ref/chrom_masked_regions.bed',  bed = 'ref/gencode_chroms.bed', bt_g = 'ref/chrom_lengths_bt.txt'
     shell:
         '''
         module load ucsc
         faToTwoBit {genome} {output.tbit} 
         twoBitInfo {output.tbit} -nBed stdout > {output.chrom_masks}
-        '''
-
-
-rule get_chrom_sizes:
-    input: genome, transcripts, ano
-    output: bed = 'ref/gencode_chroms.bed', bt_g = 'ref/chrom_lengths_bt.txt'
-    shell:
-        '''
         python3 scripts/chromFasta2Bed.py {genome} {output.bed}
         cut {output.bed} -f1,3 > {output.bt_g}
         '''
 
+
+'''
+pad annotated transcripts and get distribution of transcript lengths 
+'''
+
+
 rule get_transcript_info:
-    input: bt_g = 'ref/chrom_lengths_bt.txt', a=ano, t=transcripts
-    output: tloc = 'ref/transcript_locs.bed', tloc_pad = 'ref/transcript_locs_padded.bed', tx_l='ref/transcript_lengths.bed'
+    input: bt_g = 'ref/chrom_lengths_bt.txt', a = ano, transcripts = 'run_k-{k}_l-{l}/gencode_transcript_seqs_valid_size.fa'
+    output: tloc = 'run_k-{k}_l-{l}/transcript_locs.bed', tloc_pad = 'run_k-{k}_l-{l}/transcript_locs_padded.bed', tx_l = 'run_k-{k}_l-{l}/transcript_lengths.bed'
     shell:
         '''
         module load bedtools
         awk '$3 == "transcript"' {ano}  | cut -f1,4,5 > {output.tloc}
         bedtools slop -b 100 -i {output.tloc} -g {input.bt_g} > {output.tloc_pad}
-        python3 scripts/chromFasta2Bed.py {transcripts} {output.tx_l}
+        python3 scripts/chromFasta2Bed.py {input.transcripts} {output.tx_l}
         '''
 
 
 rule make_valid_chrom_intervals:
-    input: chrom_bed = 'ref/gencode_chroms.bed', masks = 'ref/chrom_masked_regions.bed', tloc_pad = 'ref/transcript_locs_padded.bed'
-    output: ntw='ref/nontranscribed_windows.bed'
+    input: chrom_bed = 'ref/gencode_chroms.bed', masks = 'ref/chrom_masked_regions.bed', tloc_pad = 'run_k-{k}_l-{l}/transcript_locs_padded.bed'
+    output: ntw = 'run_k-{k}_l-{l}/nontranscribed_windows.bed'
     shell:
         '''
         module load bedtools
@@ -75,25 +87,42 @@ rule make_valid_chrom_intervals:
 
 # https://stackoverflow.com/questions/5914513/shuffling-lines-of-a-file-with-a-fixed-seed
 
+'''
+randomly sample lengths annotated transcript length distribution, and then overlay those on to the non transcribd windows we found earlier (could not figure out how to get gnu shuf to take a random seed  )
+'''
 rule make_dummy_tx:
-    input: tx_l = 'ref/transcript_lengths.bed', wins = 'ref/nontranscribed_windows.bed', bt_g = 'ref/chrom_lengths_bt.txt'
-    output: shufs='ref/wins_to_shuffle.bed',  dtx='ref/dummy_tx.bed',
+    input: tx_l = 'run_k-{k}_l-{l}/transcript_lengths.bed', wins = 'run_k-{k}_l-{l}/nontranscribed_windows.bed', bt_g = 'ref/chrom_lengths_bt.txt'
+    params: NUM_DUM_TX = config['max_dummy_transcripts'], dummy_pf = lambda wildcards: f'run_k-{wildcards.k}_l-{wildcards.l}'
+    output: shufs = 'run_k-{k}_l-{l}/shuf.bed', dtx = 'run_k-{k}_l-{l}/dummy_tx.bed',
     shell:
         '''
-        rm -rf /tmp/dummy.bed /tmp/dummy.txt
+        db=/tmp/{params.dummy_pf}.bed
+        dt=/tmp/{params.dummy_pf}.txt
+        rm -rf $db $dt
         module load bedtools        
         python3 scripts/make_dummy_tx.py {input.tx_l} {output.shufs}
-        bedtools shuffle -seed 42 -incl {input.wins} -noOverlapping -i {output.shufs} -g {input.bt_g} > /tmp/dummy.bed
-        k=`wc -l  < /tmp/dummy.bed`
-        for i in $(seq 1 $k); do echo "dummy_${{i}}" >> /tmp/dummy.txt ; done
-        paste /tmp/dummy.bed /tmp/dummy.txt > {output.dtx}
+        bedtools shuffle -seed 42 -incl {input.wins} -noOverlapping -i {output.shufs} -g {input.bt_g} > $db
+        k=`wc -l  < $db`
+        for i in $(seq 1 $k); do echo "dummy_${{i}}" >> $dt  ; done
+        paste $db $dt > {output.dtx}
         '''
 
 rule make_dummy_tx_fasta:
-    input: fa=genome, bed='ref/dummy_tx.bed'
-    output: 'ref/dummy_transcript_seqs.fa'
+    input: fa = genome, bed = 'run_k-{k}_l-{l}/dummy_tx.bed'
+    output: 'run_k-{k}_l-{l}/dummy_transcript_seqs.fa'
     shell:
         '''
         module load bedtools 
         bedtools getfasta -fi {input.fa} -bed {input.bed}  > {output}
         '''
+
+rule kmerize_transcripts:
+    input: dummy = 'run_k-{k}_l-{l}/dummy_transcript_seqs.fa', ref = 'run_k-{k}_l-{l}/gencode_transcript_seqs_valid_size.fa'
+    output: dummy_out = 'run_k-{k}_l-{l}/dummy_transcript_kmers.pydata', ref_out = 'run_k-{k}_l-{l}/ref_transcript_kmers.pydata'
+    shell:
+        '''
+        python3  scripts/kmerize_fasta.py {input.dummy} {wildcards.k} {wildcards.l} {output.dummy_out}
+        python3  scripts/kmerize_fasta.py {input.ref} {wildcards.k} {wildcards.l} {output.ref_out}
+        '''
+
+
