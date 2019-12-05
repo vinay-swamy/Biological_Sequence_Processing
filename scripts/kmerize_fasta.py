@@ -14,8 +14,8 @@ def kmerize_sequence(seq,k, n=1):
 #%%
 
 fasta=sys.argv[1]
-kmer_size=int(sys.argv[2])
-kmer_dist=int(sys.argv[3])
+kmer_size=int(sys.argv[2])# k
+kmer_dist=int(sys.argv[3])# l
 kmer_outfile=sys.argv[4]
 
 fasta_path = path.expanduser(fasta) if '~' in fasta else path.abspath(fasta)
@@ -25,4 +25,6 @@ kmer_list=[kmerize_sequence(str(record.seq),kmer_size,kmer_dist) for record in f
 
 with open(kmer_outfile, 'wb+') as ofl:
     dump(kmer_list, ofl)
+# %%
+
 # %%
