@@ -5,21 +5,23 @@ Snakefile for project
 
 '''
 
-genome='ref/gencode_genome.fa.gz'
-transcripts='ref/gencode_transcript_seqs.fa.gz'
+genome='ref/gencode_genome.fa'
+transcripts='ref/gencode_transcript_seqs.fa'
 ano='ref/gencode_ano.gtf.gz'
 
 rule all:
-    input: 'ref/nontranscribed_windows.bed',dtx='ref/dummy_tx.bed'
+    input: 'ref/nontranscribed_windows.bed','ref/dummy_tx.bed', 'ref/dummy_transcript_seqs.fa'
 
 rule download_annotation:
     output:genome, transcripts, ano
     shell:
         '''
         mkdir -p ref/
-        wget -O {genome} ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_32/GRCh38.primary_assembly.genome.fa.gz
-        wget -O {ano} ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_32/gencode.v32.annotation.gtf.gz
-        wget -O {transcripts} ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_32/gencode.v32.transcripts.fa.gz
+        wget -O - ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_32/GRCh38.primary_assembly.genome.fa.gz | gunzip -c - > {genome}
+        wget -O - ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_32/gencode.v32.annotation.gtf.gz | gunzip -c - > {ano}
+        wget -O - ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_32/gencode.v32.transcripts.fa.gz | gunzip -c - > {transcripts}
+        module load samtools 
+        samtools faidx {genome}
         '''
 
 
@@ -55,7 +57,7 @@ rule get_transcript_info:
     shell:
         '''
         module load bedtools
-        zcat {ano} | awk '$3 == "transcript"' - | cut -f1,4,5 > {output.tloc}
+        awk '$3 == "transcript"' {ano}  | cut -f1,4,5 > {output.tloc}
         bedtools slop -b 100 -i {output.tloc} -g {input.bt_g} > {output.tloc_pad}
         python3 scripts/chromFasta2Bed.py {transcripts} {output.tx_l}
         '''
@@ -78,10 +80,20 @@ rule make_dummy_tx:
     output: shufs='ref/wins_to_shuffle.bed',  dtx='ref/dummy_tx.bed',
     shell:
         '''
+        rm -rf /tmp/dummy.bed /tmp/dummy.txt
         module load bedtools        
         python3 scripts/make_dummy_tx.py {input.tx_l} {output.shufs}
         bedtools shuffle -seed 42 -incl {input.wins} -noOverlapping -i {output.shufs} -g {input.bt_g} > /tmp/dummy.bed
         k=`wc -l  < /tmp/dummy.bed`
         for i in $(seq 1 $k); do echo "dummy_${{i}}" >> /tmp/dummy.txt ; done
         paste /tmp/dummy.bed /tmp/dummy.txt > {output.dtx}
+        '''
+
+rule make_dummy_tx_fasta:
+    input: fa=genome, bed='ref/dummy_tx.bed'
+    output: 'ref/dummy_transcript_seqs.fa'
+    shell:
+        '''
+        module load bedtools 
+        bedtools getfasta -fi {input.fa} -bed {input.bed}  > {output}
         '''

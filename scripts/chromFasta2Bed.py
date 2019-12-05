@@ -1,6 +1,5 @@
 import sys
-import gzip
-with gzip.open(sys.argv[1], 'rt') as infasta, open(sys.argv[2], 'w+') as outfile:
+with open(sys.argv[1], 'rt') as infasta, open(sys.argv[2], 'w+') as outfile:
     line=infasta.readline().strip('\n')
     header=line
     length=0
