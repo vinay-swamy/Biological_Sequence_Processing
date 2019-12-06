@@ -10,6 +10,7 @@ transcripts='ref/gencode_transcript_seqs.fa'
 ano='ref/gencode_ano.gtf.gz'
 
 rule all:
+    #input: expand('run_k-{k}_l-{l}/dummy_transcript_seqs.fa',k=[6, 10, 14, 20], l=[1, 2] )
     input: expand('run_k-{k}_l-{l}/{type}_transcript_kmers.pydata', k=[6, 10, 14, 20], l=[1, 2],type=['ref', 'dummy'] )
 
 rule download_annotation:
@@ -91,7 +92,7 @@ rule make_valid_chrom_intervals:
 randomly sample lengths annotated transcript length distribution, and then overlay those on to the non transcribd windows we found earlier (could not figure out how to get gnu shuf to take a random seed  )
 '''
 rule make_dummy_tx:
-    input: tx_l = 'run_k-{k}_l-{l}/transcript_lengths.bed', wins = 'run_k-{k}_l-{l}/nontranscribed_windows.bed', bt_g = 'ref/chrom_lengths_bt.txt'
+    input: tx_l = 'run_k-{k}_l-{l}/transcript_lengths.bed', wins = 'run_k-{k}_l-{l}/nontranscribed_windows.bed', bt_g = 'ref/chrom_lengths_bt.txt', tloc_pad = 'run_k-{k}_l-{l}/transcript_locs_padded.bed'
     params: NUM_DUM_TX = config['max_dummy_transcripts'], dummy_pf = lambda wildcards: f'run_k-{wildcards.k}_l-{wildcards.l}'
     output: shufs = 'run_k-{k}_l-{l}/shuf.bed', dtx = 'run_k-{k}_l-{l}/dummy_tx.bed',
     shell:
@@ -100,8 +101,9 @@ rule make_dummy_tx:
         dt=/tmp/{params.dummy_pf}.txt
         rm -rf $db $dt
         module load bedtools        
-        python3 scripts/make_dummy_tx.py {input.tx_l} {output.shufs}
-        bedtools shuffle -seed 42 -incl {input.wins} -noOverlapping -i {output.shufs} -g {input.bt_g} > $db
+        python3 scripts/make_dummy_tx.py {input.tx_l} {params.NUM_DUM_TX} {output.shufs}
+        bedtools shuffle -seed 42 -incl {input.wins} -noOverlapping -i {output.shufs} -g {input.bt_g} |\
+             bedtools intersect -v -a stdin -b {input.tloc_pad} > $db
         k=`wc -l  < $db`
         for i in $(seq 1 $k); do echo "dummy_${{i}}" >> $dt  ; done
         paste $db $dt > {output.dtx}
@@ -109,11 +111,14 @@ rule make_dummy_tx:
 
 rule make_dummy_tx_fasta:
     input: fa = genome, bed = 'run_k-{k}_l-{l}/dummy_tx.bed'
+    params: min_transcript_length = config['min_transcript_length'], tfile = lambda wildcards: f'/tmp/run_k-{wildcards.k}_l-{wildcards.l}.bed'
     output: 'run_k-{k}_l-{l}/dummy_transcript_seqs.fa'
     shell:
         '''
         module load bedtools 
-        bedtools getfasta -fi {input.fa} -bed {input.bed}  > {output}
+        bedtools getfasta -fi {input.fa} -bed {input.bed}  > {params.tfile}
+        python3 scripts/remove_tx_by_lengths.py {params.tfile} {params.min_transcript_length} {output}
+
         '''
 
 rule kmerize_transcripts:
