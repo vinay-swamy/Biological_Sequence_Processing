@@ -11,7 +11,7 @@ ano='ref/gencode_ano.gtf.gz'
 
 rule all:
     #input: expand('run_k-{k}_l-{l}/dummy_transcript_seqs.fa',k=[6, 10, 14, 20], l=[1, 2] )
-    input: expand('run_k-{k}_l-{l}/{type}_transcript_kmers.pydata', k=[6, 10, 14, 20], l=[1, 2],type=['ref', 'dummy'] )
+    input: expand('run_k-{k}_l-{l}/models/doc2vec_ep-15_PV-DBOW_M-300.pymodel',k=[6, 10, 14, 20], l=[1, 2])
 
 rule download_annotation:
     output:genome, transcripts, ano
@@ -123,11 +123,17 @@ rule make_dummy_tx_fasta:
 
 rule kmerize_transcripts:
     input: dummy = 'run_k-{k}_l-{l}/dummy_transcript_seqs.fa', ref = 'run_k-{k}_l-{l}/gencode_transcript_seqs_valid_size.fa'
-    output: dummy_out = 'run_k-{k}_l-{l}/dummy_transcript_kmers.pydata', ref_out = 'run_k-{k}_l-{l}/ref_transcript_kmers.pydata'
+    output: kmer_pydata = 'run_k-{k}_l-{l}/data/all_record_kmers.pydata', kmer_lineSentence = 'run_k-{k}_l-{l}/data/all_record_kmers.lsf'
     shell:
         '''
-        python3  scripts/kmerize_fasta.py {input.dummy} {wildcards.k} {wildcards.l} {output.dummy_out}
-        python3  scripts/kmerize_fasta.py {input.ref} {wildcards.k} {wildcards.l} {output.ref_out}
+        python3  scripts/kmerize_fasta.py {input.dummy} {input.ref} {wildcards.k} {wildcards.l} {output.kmer_pydata} {output.kmer_lineSentence}
         '''
 
 
+rule train_doc2vec:
+    input: corpus='run_k-{k}_l-{l}/data/all_record_kmers.lsf'
+    output: model = 'run_k-{k}_l-{l}/models/doc2vec_ep-15_PV-DBOW_M-300.pymodel'
+    shell:
+        '''
+        python3 scripts/train_doc2vec.py {input.corpus} {output.model}
+        '''
