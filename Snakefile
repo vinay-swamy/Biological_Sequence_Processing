@@ -11,7 +11,7 @@ ano='ref/gencode_ano.gtf.gz'
 
 rule all:
     #input: expand('run_k-{k}_l-{l}/dummy_transcript_seqs.fa',k=[6, 10, 14, 20], l=[1, 2] )
-    input: expand('run_k-{k}_l-{l}/models/doc2vec_ep-15_PV-DBOW_M-300.pymodel',k=[6, 10, 14, 20], l=[1, 2])
+    input: expand('run_k-{k}_l-{l}/data/X_mat.pydata',k=[6, 10, 14, 20], l=[1, 2])
 
 rule download_annotation:
     output:genome, transcripts, ano
@@ -126,7 +126,7 @@ rule kmerize_transcripts:
     output: kmer_pydata = 'run_k-{k}_l-{l}/data/all_record_kmers.pydata', kmer_lineSentence = 'run_k-{k}_l-{l}/data/all_record_kmers.lsf'
     shell:
         '''
-        python3  scripts/kmerize_fasta.py {input.dummy} {input.ref} {wildcards.k} {wildcards.l} {output.kmer_pydata} {output.kmer_lineSentence}
+        python3  scripts/kmerize_fasta_low_mem.py {input.ref}  {input.dummy} {wildcards.k} {wildcards.l} {output.kmer_pydata} {output.kmer_lineSentence}
         '''
 
 
@@ -136,4 +136,13 @@ rule train_doc2vec:
     shell:
         '''
         python3 scripts/train_doc2vec.py {input.corpus} {output.model}
+        '''
+
+rule infer_vectors:
+    input: model = 'run_k-{k}_l-{l}/models/doc2vec_ep-15_PV-DBOW_M-300.pymodel', data = 'run_k-{k}_l-{l}/data/all_record_kmers.pydata'
+    output: X_data = 'run_k-{k}_l-{l}/data/X_mat.pydata', Y_data = 'run_k-{k}_l-{l}/data/Y_vec.pydata'
+    shell:
+        '''
+        python3 scripts/infer_vectors.py {input.data} {input.model} {output.X_data} {output.Y_data}
+
         '''
