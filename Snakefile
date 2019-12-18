@@ -11,7 +11,7 @@ ano='ref/gencode_ano.gtf.gz'
 
 rule all:
     #input: expand('run_k-{k}_l-{l}/dummy_transcript_seqs.fa',k=[6, 10, 14, 20], l=[1, 2] )
-    input: expand('run_k-{k}_l-{l}/data/X_mat.pydata',k=[6, 10, 14, 20], l=[1, 2])
+    input: expand('run_k-{k}_l-{l}/data/X_mat.pydata',k=[6, 10, 14, 20], l=[1, 2]), 'run_k-6_l-2/data/PC_NC_Yvec.pydata'
 
 rule download_annotation:
     output:genome, transcripts, ano
@@ -144,5 +144,20 @@ rule infer_vectors:
     shell:
         '''
         python3 scripts/infer_vectors.py {input.data} {input.model} {output.X_data} {output.Y_data}
+
+        '''
+
+
+
+rule get_PC_NC_vectors:
+    input: NC='ref/gencode_non_coding_transcripts.txt', PC='ref/gencode_protein_coding_transcripts.txt'
+    params: size=6, dist=1
+    output:  PC_fasta='ref/gencode_protein_coding_transcripts.fa', NC_fasta='ref/gencode_non_coding_transcripts.fa', kmers='run_k-6_l-2/data/PC_NC_kmers.pydata', lsf='run_k-6_l-2/data/PC_NC.lsf', xvec='run_k-6_l-2/data/PC_NC_Xmat.pydata', yvec='run_k-6_l-2/data/PC_NC_Yvec.pydata'
+    shell:
+        '''
+        python3 scripts/select_entries_from_fasta.py {transcripts} 100 {input.NC} {output.NC_fasta}
+        python3 scripts/select_entries_from_fasta.py {transcripts} 100 {input.PC} {output.PC_fasta}
+        python3 scripts/kmerize_fasta_low_mem.py {output.PC_fasta} {output.NC_fasta} {params.size} {params.dist} {output.kmers} {output.lsf}
+        python3 scripts/infer_vectors.py {output.kmers} run_k-6_l-2/models/doc2vec_ep-15_PV-DBOW_M-300.pymodel {output.xvec} {output.yvec}
 
         '''
