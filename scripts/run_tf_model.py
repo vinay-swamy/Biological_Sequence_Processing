@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 plt.ioff() 
 from tensorflow.distribute import MirroredStrategy
 from tensorflow import keras
-from data_objs import TfKmerObj
-from tensorflow.keras.layers import Embedding, LSTM, Dense, Dropout, Activation, Bidirectional, Input
+from data_objs import TfKmerObj, TfSeqvector
+from tensorflow.keras.layers import Embedding, LSTM, Dense, Dropout, Activation, Bidirectional, Input, Masking
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_policy(policy)
@@ -78,6 +78,27 @@ def dynamic_LSTM(obj):
         model.summary()
     return model
 
+def seqvector_LSTM(obj):
+    mirrored_strategy = MirroredStrategy()
+    with mirrored_strategy.scope():
+        METRICS = [ 
+        keras.metrics.CategoricalAccuracy(name='accuracy'),
+        keras.metrics.Precision(name='precision'),
+        keras.metrics.Recall(name='recall'),
+        keras.metrics.AUC(name='auc')]
+        model = keras.models.Sequential(name = 'seqvector_LSTM')
+        model.add(Masking(mask_value = 0., input_shape = obj.train_set[0].shape[1:]))
+        model.add(Bidirectional(LSTM(units = 128,dropout = .2)) )
+        model.add(Dense(units = 128, activation = 'relu'))
+        model.add(Dropout(.4))
+        model.add(Dense(units = 64, activation = 'relu'))
+        model.add(Dropout(.2))
+        model.add(Dense(units = 21, activation = 'softmax',  dtype='float32'))
+        model.compile(optimizer = keras.optimizers.Adam(), loss = 'categorical_crossentropy', metrics = METRICS)
+        model.summary()
+        return model
+
+        
 
 model_dict = {'base_LSTM' : base_LSTM, 'dynamic_LSTM' : dynamic_LSTM, 'LSTM_seqvector': LSTM_seqvector}
 
