@@ -1,7 +1,13 @@
-# Final Project for BIOF509 Deep learning for Healthcare 
+# Machine learning for biological sequences 
+This repo is where I test develop/test/benchmark different machine leanring techniques for RNA sequences. Most of what I write here is for my ocular transriptome project, but I needed a way to test out ideas with a solved problems
 
-For my final project I want to see if I can use deep learning methods to model and classify biological sequences, specifically RNA. My research project involves a lot of work with RNA sequences, so the results I get here will translate to my own work 
+For my final project I want to see if I can use deep learning methods to model and classify biological sequences, specifically RNA. My research project involves a lot of work with RNA sequences, so the results I get here will translate to my own work. This repo started as my final project for FAES's deep learning course, but I  
 
+
+
+
+
+# BIOF509 Deep Learning for healthcare final report
 ## Motivation
 RNA sequences or transcripts are the basis of gene expression and store an enormous amount of information. Reseachers have extracted some of that information through experiments, such as protein domains, and RNA binding protein motifs. A common task with RNA sequences is determining whether a transcript is protein coding, or noncoding. This is a relatively simple task and can determined to nearly 100% accuracy, because through years of research we have learned about codons and how exactly RNA is translated in to proteins. But Im curious to see how a model incorporating no prior biological knowledge will perform. This might especially be useful to because I want to try and use this for my own research, where I've been trying to classify potential novel gene isoforms as real or not.
 
@@ -13,7 +19,7 @@ After a little digging, there is a little bit previous work in the field. people
 ## Proposed Strategy
 Im going to make 2 different models
 
-1. The classic NLP model with Doc2Vec embedding + ml algorithmn. Doc2Vec generates a single vector for each sequence.This is going to be my point of comparison.
+    1. The classic NLP model with Doc2Vec embedding + ml algorithmn. Doc2Vec generates a single vector for each sequence.This is going to be my point of comparison.
     
     2. An RNN that generates a supervised embedding
 
